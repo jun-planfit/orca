@@ -55,6 +55,24 @@ export function resolveAutomationDispatchWorkspace(
 
 type ResolvedAutomationDispatchWorkspace = ReturnType<typeof resolveAutomationDispatchWorkspace>
 
+/** Refreshes the local catalog once before treating a missing automation project as unavailable. */
+export async function refreshLocalAutomationDispatchWorkspace(
+  getState: () => AutomationDispatchStoreState,
+  automation: Automation,
+  run: AutomationRun
+): Promise<{
+  state: AutomationDispatchStoreState
+  resolved: ResolvedAutomationDispatchWorkspace
+}> {
+  await getState().fetchReposForAllHosts({ remoteHosts: 'skip' })
+  await getState().awaitLocalRepoCatalogSettlement()
+  const state = getState()
+  return {
+    state,
+    resolved: resolveAutomationDispatchWorkspace(state, automation, run)
+  }
+}
+
 export async function prepareAutomationDispatchWorkspace(args: {
   state: AutomationDispatchStoreState
   automation: Automation
