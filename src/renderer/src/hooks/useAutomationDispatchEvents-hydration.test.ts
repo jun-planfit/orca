@@ -1,7 +1,10 @@
-import type * as ReactModule from 'react'
+// @vitest-environment happy-dom
+import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAutomationDispatchEvents } from './useAutomationDispatchEvents'
 
-const mockOnDispatchRequested = vi.fn(() => () => {})
+const mockUnsubscribe = vi.fn()
+const mockOnDispatchRequested = vi.fn(() => mockUnsubscribe)
 const mockRendererReady = vi.fn()
 
 vi.mock('./automation-dispatch-handler', () => ({
@@ -10,10 +13,10 @@ vi.mock('./automation-dispatch-handler', () => ({
 
 describe('useAutomationDispatchEvents hydration gate', () => {
   beforeEach(() => {
-    vi.resetModules()
     vi.clearAllMocks()
-    vi.stubGlobal('window', {
-      api: {
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
         automations: {
           onDispatchRequested: mockOnDispatchRequested,
           rendererReady: mockRendererReady
@@ -22,32 +25,23 @@ describe('useAutomationDispatchEvents hydration gate', () => {
     })
   })
 
-  async function mount(rendererReady: boolean): Promise<void> {
-    vi.doMock('react', async () => {
-      const actual = await vi.importActual<typeof ReactModule>('react')
-      return {
-        ...actual,
-        useEffect: (effect: () => void | (() => void)) => {
-          effect()
-        }
-      }
-    })
-    const { useAutomationDispatchEvents: registerAutomationDispatchEvents } =
-      await import('./useAutomationDispatchEvents')
-    registerAutomationDispatchEvents(rendererReady)
-  }
-
-  it('subscribes without releasing scheduled runs before startup hydration', async () => {
-    await mount(false)
+  it('releases scheduled runs once when startup hydration becomes ready', () => {
+    const hook = renderHook(
+      ({ rendererReady }: { rendererReady: boolean }) => useAutomationDispatchEvents(rendererReady),
+      { initialProps: { rendererReady: false } }
+    )
 
     expect(mockOnDispatchRequested).toHaveBeenCalledOnce()
     expect(mockRendererReady).not.toHaveBeenCalled()
-  })
 
-  it('releases scheduled runs after startup hydration', async () => {
-    await mount(true)
-
+    hook.rerender({ rendererReady: true })
     expect(mockOnDispatchRequested).toHaveBeenCalledOnce()
     expect(mockRendererReady).toHaveBeenCalledOnce()
+
+    hook.rerender({ rendererReady: true })
+    expect(mockRendererReady).toHaveBeenCalledOnce()
+
+    hook.unmount()
+    expect(mockUnsubscribe).toHaveBeenCalledOnce()
   })
 })

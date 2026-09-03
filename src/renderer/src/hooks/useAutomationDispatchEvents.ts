@@ -1,6 +1,10 @@
 import { useEffect } from 'react'
 import { handleAutomationDispatchRequest } from './automation-dispatch-handler'
 
+/**
+ * Keeps the dispatch listener attached while withholding main's readiness
+ * handshake until the renderer has hydrated its workspace catalog.
+ */
 export function useAutomationDispatchEvents(rendererReady: boolean): void {
   useEffect(() => {
     const unsubscribe = window.api.automations.onDispatchRequested(handleAutomationDispatchRequest)
