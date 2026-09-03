@@ -64,7 +64,9 @@ export async function refreshLocalAutomationDispatchWorkspace(
   state: AutomationDispatchStoreState
   resolved: ResolvedAutomationDispatchWorkspace
 }> {
-  await getState().fetchReposForAllHosts({ remoteHosts: 'skip' })
+  // Refresh only the local host. An all-host refresh claims the store-wide
+  // generation and can cancel startup's in-flight remote catalog load.
+  await getState().fetchRepos({ runtimeEnvironmentId: null })
   await getState().awaitLocalRepoCatalogSettlement()
   const state = getState()
   return {

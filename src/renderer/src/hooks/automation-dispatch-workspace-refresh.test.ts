@@ -18,7 +18,7 @@ function makeState(repos: { id: string }[]) {
     repos,
     allWorktrees: () => [],
     getKnownWorktreeById: () => undefined,
-    fetchReposForAllHosts: vi.fn<() => Promise<void>>(),
+    fetchRepos: vi.fn<() => Promise<void>>(),
     awaitLocalRepoCatalogSettlement: vi.fn<() => Promise<void>>()
   }
 }
@@ -28,7 +28,7 @@ describe('refreshLocalAutomationDispatchWorkspace', () => {
     const refreshed = makeState([{ id: 'repo-1' }])
     const initial = makeState([])
     let current = initial
-    initial.fetchReposForAllHosts.mockImplementation(async () => {
+    initial.fetchRepos.mockImplementation(async () => {
       current = refreshed
     })
     refreshed.awaitLocalRepoCatalogSettlement.mockResolvedValue(undefined)
@@ -39,7 +39,7 @@ describe('refreshLocalAutomationDispatchWorkspace', () => {
       run
     )
 
-    expect(initial.fetchReposForAllHosts).toHaveBeenCalledWith({ remoteHosts: 'skip' })
+    expect(initial.fetchRepos).toHaveBeenCalledWith({ runtimeEnvironmentId: null })
     expect(refreshed.awaitLocalRepoCatalogSettlement).toHaveBeenCalledOnce()
     expect(result.state).toBe(refreshed)
     expect(result.resolved.repo?.id).toBe('repo-1')
@@ -47,7 +47,7 @@ describe('refreshLocalAutomationDispatchWorkspace', () => {
 
   it('keeps the target unavailable when the refreshed catalog is still empty', async () => {
     const state = makeState([])
-    state.fetchReposForAllHosts.mockResolvedValue(undefined)
+    state.fetchRepos.mockResolvedValue(undefined)
     state.awaitLocalRepoCatalogSettlement.mockResolvedValue(undefined)
 
     const result = await refreshLocalAutomationDispatchWorkspace(
@@ -56,7 +56,7 @@ describe('refreshLocalAutomationDispatchWorkspace', () => {
       run
     )
 
-    expect(state.fetchReposForAllHosts).toHaveBeenCalledOnce()
+    expect(state.fetchRepos).toHaveBeenCalledWith({ runtimeEnvironmentId: null })
     expect(state.awaitLocalRepoCatalogSettlement).toHaveBeenCalledOnce()
     expect(result.resolved.repo).toBeUndefined()
   })
