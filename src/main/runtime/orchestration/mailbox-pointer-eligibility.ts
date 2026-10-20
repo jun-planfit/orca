@@ -2,6 +2,9 @@ import { ORCHESTRATION_DELIVERY_BATCH_LIMIT, type MessageRow, type Orchestration
 
 export type OrchestrationMessageWaiter = { typeFilter: string[] | undefined }
 
+// Why: a heartbeat is liveness only; pointing at it wakes a coordinator turn with nothing to do.
+const NEVER_POINTER_TYPES: readonly string[] = ['heartbeat']
+
 export function messageTypeHasOrchestrationWaiter(
   waiters: ReadonlySet<OrchestrationMessageWaiter> | undefined,
   messageType: string
@@ -31,7 +34,8 @@ export function hasUnfilteredOrchestrationWaiter(
  * Both delivery lanes — bytes into a PTY, a turn into a structured session — select their batch
  * identically and differ only in what they do with it, so the selection lives here rather than
  * being kept in step in two copies. An unfiltered waiter owns the whole mailbox and yields an
- * empty batch: a caller blocked in `check --wait` preempts pointer delivery entirely.
+ * empty batch: a caller blocked in `check --wait` preempts pointer delivery entirely. Heartbeats
+ * never form or join a batch; they stay undelivered and unread until an explicit `check` reads them.
  *
  * Type exclusion is exact in SQL and no post-filter is owed. The unfiltered case returns above, so
  * every remaining waiter contributes a concrete type list, and `messages.type` is TEXT with no
@@ -47,7 +51,7 @@ export function selectOrchestrationPointerBatch(input: {
   if (hasUnfilteredOrchestrationWaiter(input.waiters)) {
     return []
   }
-  const excludedTypes = new Set(input.reservedTypes)
+  const excludedTypes = new Set([...NEVER_POINTER_TYPES, ...(input.reservedTypes ?? [])])
   for (const waiter of input.waiters ?? []) {
     for (const type of waiter.typeFilter ?? []) {
       excludedTypes.add(type)

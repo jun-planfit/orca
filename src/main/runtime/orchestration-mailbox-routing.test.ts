@@ -11,4 +11,5 @@ vi.mock('electron', () => ({
 import './orchestration-mailbox-crash-recovery.spec'
 import './orchestration-mailbox-detached-routing.spec'
 import './orchestration-mailbox-filtered-waiters.spec'
+import './orchestration-mailbox-heartbeat-pointer.spec'
 import './orchestration-mailbox-routing-races.spec'

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ORCHESTRATION_DELIVERY_BATCH_LIMIT } from './db'
 import { OrchestrationDb } from './db/orchestration-db'
 import {
   selectOrchestrationPointerBatch,
@@ -85,6 +86,57 @@ describe('selectOrchestrationPointerBatch', () => {
           reservedTypes: undefined
         })
       ).toEqual([])
+    } finally {
+      db.close()
+    }
+  })
+
+  it('never points at a mailbox holding only heartbeats', () => {
+    const db = new OrchestrationDb(':memory:')
+    try {
+      db.insertMessages([
+        { runId: 'run_legacy_local', from: 'worker', to: MAILBOX, subject: 'a', type: 'heartbeat' },
+        { runId: 'run_legacy_local', from: 'worker', to: MAILBOX, subject: 'b', type: 'heartbeat' }
+      ])
+      expect(
+        selectOrchestrationPointerBatch({
+          db,
+          mailboxHandle: MAILBOX,
+          waiters: undefined,
+          reservedTypes: undefined
+        })
+      ).toEqual([])
+    } finally {
+      db.close()
+    }
+  })
+
+  it('points past a backlog of heartbeats larger than one batch', () => {
+    const db = new OrchestrationDb(':memory:')
+    try {
+      db.insertMessages(
+        Array.from({ length: ORCHESTRATION_DELIVERY_BATCH_LIMIT + 5 }, (_, index) => ({
+          runId: 'run_legacy_local',
+          from: 'worker',
+          to: MAILBOX,
+          subject: `beat ${index}`,
+          type: 'heartbeat' as const
+        }))
+      )
+      db.insertMessage({
+        runId: 'run_legacy_local',
+        from: 'worker',
+        to: MAILBOX,
+        subject: 'done',
+        type: 'worker_done'
+      })
+      const batch = selectOrchestrationPointerBatch({
+        db,
+        mailboxHandle: MAILBOX,
+        waiters: waiters(['question']),
+        reservedTypes: new Set(['status'])
+      })
+      expect(batch.map((m) => m.type)).toEqual(['worker_done'])
     } finally {
       db.close()
     }
