@@ -108,7 +108,12 @@ describe.runIf(process.platform === 'darwin' && process.env.ORCA_FSEVENTS_STORM_
           }
         })
 
-        const sawDroppedEvents = (): boolean => probeSawRescan
+        const sawDroppedEvents = (): boolean =>
+          probeSawRescan &&
+          sendMock.mock.calls.some(
+            ([channel, payload]) =>
+              channel === 'fs:changed' && payload.events.some((event) => event.kind === 'overflow')
+          )
         // Why: the client-side drop depends on machine load, so storm again until FSEvents reports it.
         for (let round = 0; round < STORM_ROUNDS && !sawDroppedEvents(); round++) {
           await Promise.all(
