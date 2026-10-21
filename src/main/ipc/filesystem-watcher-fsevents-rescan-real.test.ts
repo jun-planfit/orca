@@ -16,6 +16,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { subscribe, type AsyncSubscription } from '@parcel/watcher'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FsChangedPayload } from '../../shared/filesystem-entry-types'
 
@@ -28,6 +29,7 @@ vi.mock('electron', () => ({
 import { closeAllWatchers } from './filesystem-watcher-shutdown'
 import { registerFilesystemWatcherHandlers } from './filesystem-watcher-handlers'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
+import { isParcelWatcherRescanRequiredError } from './parcel-watcher-rescan-error'
 
 type HandlerMap = Record<string, (_event: unknown, args: unknown) => unknown>
 type SendFsChanged = (channel: string, payload: FsChangedPayload) => void
@@ -65,6 +67,7 @@ describe.runIf(process.platform === 'darwin' && process.env.ORCA_FSEVENTS_STORM_
   () => {
     const handlers: HandlerMap = {}
     let tempDir: string | null = null
+    let probe: AsyncSubscription | null = null
 
     beforeEach(async () => {
       handleMock.mockReset()
@@ -76,6 +79,8 @@ describe.runIf(process.platform === 'darwin' && process.env.ORCA_FSEVENTS_STORM_
     })
 
     afterEach(async () => {
+      await probe?.unsubscribe()
+      probe = null
       await closeAllWatchers()
       if (tempDir) {
         await rm(tempDir, { recursive: true, force: true })
@@ -95,13 +100,15 @@ describe.runIf(process.platform === 'darwin' && process.env.ORCA_FSEVENTS_STORM_
         const sendMock = vi.fn<SendFsChanged>()
         const sender = createWatcherSender(1, sendMock)
         await handlers['fs:watchWorktree']({ sender }, { worktreePath: tempDir })
+        // Why: the Orca watcher runs in a child, so a probe client proves the storm hit MustScanSubDirs.
+        let probeSawRescan = false
+        probe = await subscribe(tempDir, (err) => {
+          if (err && isParcelWatcherRescanRequiredError(err)) {
+            probeSawRescan = true
+          }
+        })
 
-        const sawDroppedEvents = (): boolean =>
-          errorLog.mock.calls.length > 0 ||
-          sendMock.mock.calls.some(
-            ([channel, payload]) =>
-              channel === 'fs:changed' && payload.events.some((event) => event.kind === 'overflow')
-          )
+        const sawDroppedEvents = (): boolean => probeSawRescan
         // Why: the client-side drop depends on machine load, so storm again until FSEvents reports it.
         for (let round = 0; round < STORM_ROUNDS && !sawDroppedEvents(); round++) {
           await Promise.all(
