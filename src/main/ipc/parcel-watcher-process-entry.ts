@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type * as ParcelWatcher from '@parcel/watcher'
 import { loadParcelWatcher } from './parcel-watcher-module-loader'
+import { isParcelWatcherRescanRequiredError } from './parcel-watcher-rescan-error'
 import { startShallowWatcher } from './parcel-watcher-shallow-subscription'
 import { detectShallowWatchDelivery } from './shallow-watch-delivery-probe'
 import {
@@ -218,6 +219,10 @@ function main(): void {
                 return
               }
               if (err) {
+                if (isParcelWatcherRescanRequiredError(err)) {
+                  eventDelivery.overflow()
+                  return
+                }
                 send({ op: 'watch-error', id, message: errorMessage(err) })
                 return
               }
